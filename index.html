@@ -1,34 +1,76 @@
 <!doctype html>
 <meta charset="utf-8" />
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
   body { font: 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 2rem; }
+  .layout { display: flex; align-items: flex-start; gap: 1.5rem; }
   #stage { 
     font-size: 14pt; font-weight: 700; letter-spacing: 0.5px;
-    display: grid; place-items: center; width: 4in; height: 4in;
-    border: 2px solid #ccc; margin: 1rem 0; user-select: none;
+    display: grid; place-items: center; width: 100%; height: 4in;
+    margin: 0; user-select: none;
     contain: layout paint; /* isolate paints */
     will-change: contents; /* we change text frequently */
     text-align: center;
   }
+  button { background: #0d6efd; color: #fff; border: none; padding: 0.5rem 0.75rem; border-radius: 6px; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .panel { width: 4in; }
+  #toggle { width: 100%; display: block; }
+  .nav-row { width: 100%; display: flex; gap: 0.5rem; }
+  .nav-row button { flex: 1; }
+  .settings { min-width: 16rem; width: auto; }
+  .control { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin: 0.5rem 0; }
   label { display: inline-block; min-width: 6rem; }
   .row { margin: 0.5rem 0; }
   #stats { font-variant-numeric: tabular-nums; }
 </style>
 
-<div class="row">
-  <label for="fps">Target FPS</label>
-  <input id="fps" type="number" value="37" min="1" max="240" step="1">
-  <label for="maxChars" style="margin-left:1rem">Max characters</label>
-  <input id="maxChars" type="number" value="200" min="1" max="2000" step="10">
-  <button id="start">Start</button>
-  <button id="stop">Stop</button>
-  <label style="margin-left:1rem">
-    <input id="snap" type="checkbox"> Snap to display multiples (optional)
-  </label>
+<h1 class="text-center" style="margin:0 0 0.5rem 0;">WordFlow</h1>
+<div class="container-fluid">
+  <div class="row g-3 align-items-start">
+    <div class="col-auto">
+      <div class="card panel p-0">
+        <div class="card-body p-0">
+          <div id="stage" aria-live="off">Ready…</div>
+        </div>
+      </div>
+      <div class="card mt-2 panel p-0">
+        <div class="card-body p-2">
+          <button id="toggle" class="btn btn-primary w-100">Start</button>
+          <div class="nav-row" style="margin-top:0.5rem">
+            <button id="prev" class="btn btn-primary">◀ Prev</button>
+            <button id="next" class="btn btn-primary">Next ▶</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-auto settings" aria-label="Settings">
+      <div class="card">
+        <div class="card-header">Settings</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label for="fps" class="form-label">Target FPS</label>
+            <input id="fps" type="number" class="form-control" value="4" min="1" max="240" step="1">
+          </div>
+          <div class="mb-3">
+            <label for="maxChars" class="form-label">Max characters</label>
+            <input id="maxChars" type="number" class="form-control" value="20" min="1" max="2000" step="1">
+          </div>
+          <div class="form-check">
+            <input id="snap" class="form-check-input" type="checkbox">
+            <label class="form-check-label" for="snap">Snap to display</label>
+          </div>
+        </div>
+      </div>
+      <div class="card mt-3">
+        <div class="card-header">Statistics</div>
+        <div class="card-body">
+          <div id="stats">–</div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
-
-<div id="stage" aria-live="off">Ready…</div>
-<div id="stats">–</div>
 
 <script>
 // Text loaded from TheTimeMachine.txt
@@ -39,9 +81,10 @@ const stage = document.getElementById('stage');
 const fpsInput = document.getElementById('fps');
 const snapChk  = document.getElementById('snap');
 const stats    = document.getElementById('stats');
-const startBtn = document.getElementById('start');
-const stopBtn  = document.getElementById('stop');
+const toggleBtn = document.getElementById('toggle');
 const maxCharsInput = document.getElementById('maxChars');
+const prevBtn  = document.getElementById('prev');
+const nextBtn  = document.getElementById('next');
 
 let running = false;
 let idx = 0;
@@ -54,6 +97,18 @@ let maxChars = Math.max(1, Number(maxCharsInput.value) || 1);
 const intervals = [];
 const MAX_SAMPLES = 120;
 let lastSwapTime = 0;
+// history of how many tokens were consumed per shown frame
+const history = [];
+
+// Disable controls until text loads
+toggleBtn.disabled = true;
+prevBtn.disabled = true;
+nextBtn.disabled = true;
+
+function updateRunButtons() {
+  // Toggle button label reflects state
+  toggleBtn.textContent = running ? 'Stop' : 'Start';
+}
 
 // Load and prepare text
 const loadPromise = (async () => {
@@ -73,6 +128,12 @@ const loadPromise = (async () => {
     tokens = normalized.split(' ').filter(Boolean);
     if (!text || text.length === 0 || tokens.length === 0) throw new Error('No text found');
     stage.textContent = 'Ready…';
+    // Enable controls now that content is ready
+    running = false;
+    updateRunButtons();
+    toggleBtn.disabled = false;
+    prevBtn.disabled = false;
+    nextBtn.disabled = false;
   } catch (err) {
     console.error(err);
     stage.textContent = 'Failed to load TheTimeMachine.txt';
@@ -81,6 +142,12 @@ const loadPromise = (async () => {
       : 'Ensure index.html and TheTimeMachine.txt are served from the same origin.';
     text = `Failed to load TheTimeMachine.txt. ${hint}`;
     tokens = text.split(' ');
+    // Allow manual stepping even on error text
+    running = false;
+    updateRunButtons();
+    toggleBtn.disabled = false;
+    prevBtn.disabled = false;
+    nextBtn.disabled = false;
   }
 })();
 
@@ -102,21 +169,17 @@ function updatePeriod() {
   periodMs = effectivePeriodMs(1000 / Math.max(1, Number(fpsInput.value)));
 }
 
-function showNext() {
-  if (!tokens || tokens.length === 0) return; // nothing to show yet
+function computeChunk(startIndex) {
   const total = tokens.length;
   let remaining = Math.max(1, Math.min(maxChars, 1000000));
   const chunk = [];
-  let cursor = idx;
-  // Build chunk without breaking words, up to maxChars
-  for (let i = 0; i < total; i++) { // cap to one full loop max
+  let cursor = startIndex;
+  for (let i = 0; i < total; i++) {
     const token = tokens[cursor];
-    const extra = token.length + (chunk.length ? 1 : 0); // include space when not first
+    const extra = token.length + (chunk.length ? 1 : 0);
     if (chunk.length === 0 && token.length > remaining) {
-      // Fallback: first token longer than limit; hard slice
-      chunk.push(token.slice(0, remaining));
-      cursor = (cursor + 1) % total;
-      break;
+      // fallback: slice a single long token
+      return { chunk: [token.slice(0, remaining)], consumed: 1, nextIndex: (cursor + 1) % total };
     }
     if (extra <= remaining) {
       chunk.push(token);
@@ -126,25 +189,33 @@ function showNext() {
       break;
     }
   }
+  return { chunk, consumed: chunk.length, nextIndex: cursor };
+}
+
+function showNext() {
+  if (!tokens || tokens.length === 0) return; // nothing to show yet
+  const { chunk, consumed, nextIndex } = computeChunk(idx);
   stage.textContent = chunk.join(' ');
-  // advance by number of words shown
-  idx = (idx + chunk.length) % total;
+  idx = nextIndex;
+  history.push(consumed);
 
   // record actual interval
-  const now = performance.now();
-  if (lastSwapTime) {
-    const dt = now - lastSwapTime;
-    intervals.push(dt);
-    if (intervals.length > MAX_SAMPLES) intervals.shift();
+  if (running) {
+    const now = performance.now();
+    if (lastSwapTime) {
+      const dt = now - lastSwapTime;
+      intervals.push(dt);
+      if (intervals.length > MAX_SAMPLES) intervals.shift();
 
-    const mean = intervals.reduce((a,b)=>a+b,0) / intervals.length;
-    const variance = intervals.reduce((a,b)=>a + (b-mean)*(b-mean), 0) / intervals.length;
-    const stdev = Math.sqrt(variance);
+      const mean = intervals.reduce((a,b)=>a+b,0) / intervals.length;
+      const variance = intervals.reduce((a,b)=>a + (b-mean)*(b-mean), 0) / intervals.length;
+      const stdev = Math.sqrt(variance);
 
-    stats.textContent = `Target: ${(1000/periodMs).toFixed(2)} fps  |  Actual: ${(1000/mean).toFixed(2)} fps  `
-      + `(${mean.toFixed(2)} ms ± ${stdev.toFixed(2)} ms over ${intervals.length} swaps)`;
+      stats.textContent = `Target: ${(1000/periodMs).toFixed(2)} fps  |  Actual: ${(1000/mean).toFixed(2)} fps  `
+        + `(${mean.toFixed(2)} ms ± ${stdev.toFixed(2)} ms over ${intervals.length} swaps)`;
+    }
+    lastSwapTime = now;
   }
-  lastSwapTime = now;
 }
 
 function loop(now) {
@@ -166,22 +237,46 @@ async function start() {
   try { await loadPromise; } catch (_) { /* handled in loader */ }
   updatePeriod();
   running = true;
+  updateRunButtons();
   idx = 0;
   acc = 0; last = 0; lastSwapTime = 0;
   intervals.length = 0;
+  history.length = 0;
   requestAnimationFrame(loop);
 }
-function stop() { running = false; }
+function stop() { running = false; updateRunButtons(); }
 
 fpsInput.addEventListener('change', () => {
   updatePeriod();
   // keep current accumulator; change takes effect immediately
 });
 snapChk.addEventListener('change', updatePeriod);
-startBtn.addEventListener('click', start);
-stopBtn.addEventListener('click', stop);
+toggleBtn.addEventListener('click', () => {
+  if (running) { stop(); }
+  else { start(); }
+});
 maxCharsInput.addEventListener('change', () => {
   maxChars = Math.max(1, Number(maxCharsInput.value) || 1);
+});
+prevBtn.addEventListener('click', async () => {
+  if (!tokens || tokens.length === 0) {
+    try { await loadPromise; } catch (_) {}
+  }
+  if (running) stop();
+  if (!tokens || tokens.length === 0) return;
+  if (history.length === 0) return;
+  const total = tokens.length;
+  const consumed = history.pop();
+  idx = (idx - consumed + total) % total;
+  const { chunk } = computeChunk(idx);
+  stage.textContent = chunk.join(' ');
+});
+nextBtn.addEventListener('click', async () => {
+  if (!tokens || tokens.length === 0) {
+    try { await loadPromise; } catch (_) {}
+  }
+  if (running) stop();
+  showNext();
 });
 
 // Pause cleanly in background tabs (RAF throttles anyway)
