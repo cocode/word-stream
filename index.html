@@ -1,0 +1,152 @@
+<!doctype html>
+<meta charset="utf-8" />
+<style>
+  body { font: 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 2rem; }
+  #stage { 
+    font-size: 72px; font-weight: 700; letter-spacing: 0.5px;
+    display: grid; place-items: center; width: 80vw; height: 40vh;
+    border: 2px solid #ccc; margin: 1rem 0; user-select: none;
+    contain: layout paint; /* isolate paints */
+    will-change: contents; /* we change text frequently */
+  }
+  label { display: inline-block; min-width: 6rem; }
+  .row { margin: 0.5rem 0; }
+  #stats { font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="row">
+  <label for="fps">Target FPS</label>
+  <input id="fps" type="number" value="37" min="1" max="240" step="1">
+  <button id="start">Start</button>
+  <button id="stop">Stop</button>
+  <label style="margin-left:1rem">
+    <input id="snap" type="checkbox"> Snap to display multiples (optional)
+  </label>
+</div>
+
+<div id="stage" aria-live="off">Ready…</div>
+<div id="stats">–</div>
+
+<script>
+// Sentences loaded from TheTimeMachine.txt
+let words = [];
+
+const stage = document.getElementById('stage');
+const fpsInput = document.getElementById('fps');
+const snapChk  = document.getElementById('snap');
+const stats    = document.getElementById('stats');
+const startBtn = document.getElementById('start');
+const stopBtn  = document.getElementById('stop');
+
+let running = false;
+let idx = 0;
+let acc = 0;
+let last = 0;
+let periodMs = 1000 / Number(fpsInput.value);
+
+// rolling measurements
+const intervals = [];
+const MAX_SAMPLES = 120;
+let lastSwapTime = 0;
+
+// Load and split text into sentences
+const loadPromise = (async () => {
+  try {
+    stage.textContent = 'Loading text…';
+    const res = await fetch('TheTimeMachine.txt');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    // Normalize whitespace
+    const normalized = text.replace(/\r\n?|\n/g, ' ').replace(/\s+/g, ' ').trim();
+    // Split on sentence terminators, keep punctuation
+    const raw = normalized.split(/(?<=[.!?])\s+(?=[\"'“”‘’(\[]?[A-Z0-9])/g);
+    words = raw.map(s => s.trim()).filter(s => s.length > 0);
+    if (words.length === 0) throw new Error('No sentences parsed');
+    stage.textContent = 'Ready…';
+  } catch (err) {
+    console.error(err);
+    stage.textContent = 'Failed to load TheTimeMachine.txt';
+    words = [
+      'Failed to load TheTimeMachine.txt. Serve this folder over HTTP to allow fetch to work.'
+    ];
+  }
+})();
+
+function effectivePeriodMs(targetMs) {
+  if (!snapChk.checked) return targetMs;
+  // Optionally “snap” to multiples of the display’s refresh period
+  // so spacing is uniform (useful if you want 30 on a 60 Hz screen).
+  // If displayRate is unknown, assume 60.
+  const displayRate = (window.matchMedia("(min-resolution: 120dppx)").matches && window.screen && screen.frequency)
+    ? screen.frequency
+    : 60;
+  const refreshMs = 1000 / displayRate;
+  // round to nearest integer multiple (>=1)
+  const steps = Math.max(1, Math.round(targetMs / refreshMs));
+  return steps * refreshMs;
+}
+
+function updatePeriod() {
+  periodMs = effectivePeriodMs(1000 / Math.max(1, Number(fpsInput.value)));
+}
+
+function showNext() {
+  if (!words || words.length === 0) return; // nothing to show yet
+  idx = (idx + 1) % words.length;
+  stage.textContent = words[idx];
+
+  // record actual interval
+  const now = performance.now();
+  if (lastSwapTime) {
+    const dt = now - lastSwapTime;
+    intervals.push(dt);
+    if (intervals.length > MAX_SAMPLES) intervals.shift();
+
+    const mean = intervals.reduce((a,b)=>a+b,0) / intervals.length;
+    const variance = intervals.reduce((a,b)=>a + (b-mean)*(b-mean), 0) / intervals.length;
+    const stdev = Math.sqrt(variance);
+
+    stats.textContent = `Target: ${(1000/periodMs).toFixed(2)} fps  |  Actual: ${(1000/mean).toFixed(2)} fps  `
+      + `(${mean.toFixed(2)} ms ± ${stdev.toFixed(2)} ms over ${intervals.length} swaps)`;
+  }
+  lastSwapTime = now;
+}
+
+function loop(now) {
+  if (!running) return;
+  if (!last) last = now;
+  acc += (now - last);
+  last = now;
+
+  // Advance at most one frame; if a frame ran long, we do NOT catch up.
+  if (acc >= periodMs) {
+    acc -= periodMs; // keep remainder to avoid long-term drift
+    showNext();
+  }
+  requestAnimationFrame(loop);
+}
+
+async function start() {
+  // Ensure sentences are loaded before starting
+  try { await loadPromise; } catch (_) { /* handled in loader */ }
+  updatePeriod();
+  running = true;
+  idx = -1; acc = 0; last = 0; lastSwapTime = 0;
+  intervals.length = 0;
+  requestAnimationFrame(loop);
+}
+function stop() { running = false; }
+
+fpsInput.addEventListener('change', () => {
+  updatePeriod();
+  // keep current accumulator; change takes effect immediately
+});
+snapChk.addEventListener('change', updatePeriod);
+startBtn.addEventListener('click', start);
+stopBtn.addEventListener('click', stop);
+
+// Pause cleanly in background tabs (RAF throttles anyway)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { stop(); }
+});
+</script>
