@@ -18,8 +18,8 @@
 <div class="row">
   <label for="fps">Target FPS</label>
   <input id="fps" type="number" value="37" min="1" max="240" step="1">
-  <label for="maxWords" style="margin-left:1rem">Words per frame</label>
-  <input id="maxWords" type="number" value="8" min="1" max="200" step="1">
+  <label for="maxChars" style="margin-left:1rem">Max characters</label>
+  <input id="maxChars" type="number" value="200" min="1" max="2000" step="10">
   <button id="start">Start</button>
   <button id="stop">Stop</button>
   <label style="margin-left:1rem">
@@ -31,8 +31,9 @@
 <div id="stats">–</div>
 
 <script>
-// Words loaded from TheTimeMachine.txt
-let words = [];
+// Text loaded from TheTimeMachine.txt
+let text = '';
+let tokens = [];
 
 const stage = document.getElementById('stage');
 const fpsInput = document.getElementById('fps');
@@ -40,38 +41,46 @@ const snapChk  = document.getElementById('snap');
 const stats    = document.getElementById('stats');
 const startBtn = document.getElementById('start');
 const stopBtn  = document.getElementById('stop');
-const maxWordsInput = document.getElementById('maxWords');
+const maxCharsInput = document.getElementById('maxChars');
 
 let running = false;
 let idx = 0;
 let acc = 0;
 let last = 0;
 let periodMs = 1000 / Number(fpsInput.value);
-let chunkSize = Math.max(1, Number(maxWordsInput.value) || 1);
+let maxChars = Math.max(1, Number(maxCharsInput.value) || 1);
 
 // rolling measurements
 const intervals = [];
 const MAX_SAMPLES = 120;
 let lastSwapTime = 0;
 
-// Load and split text into words
+// Load and prepare text
 const loadPromise = (async () => {
   try {
     stage.textContent = 'Loading text…';
-    const res = await fetch('TheTimeMachine.txt');
+    const res = await fetch('TheTimeMachine.txt', { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    // Normalize whitespace and split into words
-    const normalized = text.replace(/\r\n?|\n/g, ' ').replace(/\s+/g, ' ').trim();
-    words = normalized.split(' ').filter(Boolean);
-    if (words.length === 0) throw new Error('No words parsed');
+    const raw = await res.text();
+    // Normalize whitespace
+    const normalized = raw.replace(/\r\n?|\n/g, ' ').replace(/\s+/g, ' ').trim();
+    window._bookText = normalized; // debug handle
+    // store
+    window._bookLen = normalized.length;
+    // assign
+    // assign to outer-scope `text`
+    text = normalized;
+    tokens = normalized.split(' ').filter(Boolean);
+    if (!text || text.length === 0 || tokens.length === 0) throw new Error('No text found');
     stage.textContent = 'Ready…';
   } catch (err) {
     console.error(err);
     stage.textContent = 'Failed to load TheTimeMachine.txt';
-    words = [
-      'Failed to load TheTimeMachine.txt. Serve this folder over HTTP to allow fetch to work.'
-    ];
+    const hint = (location.protocol === 'file:')
+      ? 'Serve this folder over HTTP (e.g., python3 -m http.server).'
+      : 'Ensure index.html and TheTimeMachine.txt are served from the same origin.';
+    text = `Failed to load TheTimeMachine.txt. ${hint}`;
+    tokens = text.split(' ');
   }
 })();
 
@@ -94,18 +103,32 @@ function updatePeriod() {
 }
 
 function showNext() {
-  if (!words || words.length === 0) return; // nothing to show yet
-  // advance by chunk size and display that many words
-  idx = (idx + chunkSize) % words.length;
-  const end = idx + Math.min(chunkSize, words.length);
-  let chunk;
-  if (end <= words.length) {
-    chunk = words.slice(idx, end);
-  } else {
-    const overflow = end - words.length;
-    chunk = words.slice(idx).concat(words.slice(0, overflow));
+  if (!tokens || tokens.length === 0) return; // nothing to show yet
+  const total = tokens.length;
+  let remaining = Math.max(1, Math.min(maxChars, 1000000));
+  const chunk = [];
+  let cursor = idx;
+  // Build chunk without breaking words, up to maxChars
+  for (let i = 0; i < total; i++) { // cap to one full loop max
+    const token = tokens[cursor];
+    const extra = token.length + (chunk.length ? 1 : 0); // include space when not first
+    if (chunk.length === 0 && token.length > remaining) {
+      // Fallback: first token longer than limit; hard slice
+      chunk.push(token.slice(0, remaining));
+      cursor = (cursor + 1) % total;
+      break;
+    }
+    if (extra <= remaining) {
+      chunk.push(token);
+      remaining -= extra;
+      cursor = (cursor + 1) % total;
+    } else {
+      break;
+    }
   }
   stage.textContent = chunk.join(' ');
+  // advance by number of words shown
+  idx = (idx + chunk.length) % total;
 
   // record actual interval
   const now = performance.now();
@@ -139,11 +162,12 @@ function loop(now) {
 }
 
 async function start() {
-  // Ensure words are loaded before starting
+  // Ensure text is loaded before starting
   try { await loadPromise; } catch (_) { /* handled in loader */ }
   updatePeriod();
   running = true;
-  idx = -chunkSize; acc = 0; last = 0; lastSwapTime = 0;
+  idx = 0;
+  acc = 0; last = 0; lastSwapTime = 0;
   intervals.length = 0;
   requestAnimationFrame(loop);
 }
@@ -156,8 +180,8 @@ fpsInput.addEventListener('change', () => {
 snapChk.addEventListener('change', updatePeriod);
 startBtn.addEventListener('click', start);
 stopBtn.addEventListener('click', stop);
-maxWordsInput.addEventListener('change', () => {
-  chunkSize = Math.max(1, Number(maxWordsInput.value) || 1);
+maxCharsInput.addEventListener('change', () => {
+  maxChars = Math.max(1, Number(maxCharsInput.value) || 1);
 });
 
 // Pause cleanly in background tabs (RAF throttles anyway)
