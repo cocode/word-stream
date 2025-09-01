@@ -25,10 +25,11 @@
   #stats { font-variant-numeric: tabular-nums; }
 </style>
 
-<h1 class="text-center" style="margin:0 0 0.5rem 0;">WordFlow</h1>
-<div class="container-fluid">
-  <div class="row g-3 align-items-start">
-    <div class="col-auto">
+<div class="d-flex justify-content-center">
+  <div class="app-group">
+    <h1 class="text-center" style="margin:0 0 0.5rem 0;">WordFlow</h1>
+    <div class="d-flex align-items-start justify-content-center gap-3 app-cards">
+      <div class="col-auto">
       <div class="card panel p-0">
         <div class="card-body p-0">
           <div id="stage" aria-live="off">Ready…</div>
@@ -43,29 +44,30 @@
           </div>
         </div>
       </div>
-    </div>
-    <div class="col-auto settings" aria-label="Settings">
-      <div class="card">
-        <div class="card-header">Settings</div>
-        <div class="card-body">
-          <div class="mb-3">
-            <label for="fps" class="form-label">Target FPS</label>
-            <input id="fps" type="number" class="form-control" value="4" min="1" max="240" step="1">
-          </div>
-          <div class="mb-3">
-            <label for="maxChars" class="form-label">Max characters</label>
-            <input id="maxChars" type="number" class="form-control" value="20" min="1" max="2000" step="1">
-          </div>
-          <div class="form-check">
-            <input id="snap" class="form-check-input" type="checkbox">
-            <label class="form-check-label" for="snap">Snap to display</label>
+      </div>
+      <div class="col-auto settings" aria-label="Settings">
+        <div class="card">
+          <div class="card-header">Settings</div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label for="fps" class="form-label">Target FPS</label>
+              <input id="fps" type="number" class="form-control" value="4" min="1" max="240" step="1">
+            </div>
+            <div class="mb-3">
+              <label for="maxChars" class="form-label">Max characters</label>
+              <input id="maxChars" type="number" class="form-control" value="20" min="1" max="2000" step="1">
+            </div>
+            <div class="form-check">
+              <input id="snap" class="form-check-input" type="checkbox">
+              <label class="form-check-label" for="snap">Snap to display</label>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="card mt-3">
-        <div class="card-header">Statistics</div>
-        <div class="card-body">
-          <div id="stats">–</div>
+        <div class="card mt-3">
+          <div class="card-header">Statistics</div>
+          <div class="card-body">
+            <div id="stats">–</div>
+          </div>
         </div>
       </div>
     </div>
@@ -178,8 +180,8 @@ function computeChunk(startIndex) {
     const token = tokens[cursor];
     const extra = token.length + (chunk.length ? 1 : 0);
     if (chunk.length === 0 && token.length > remaining) {
-      // fallback: slice a single long token
-      return { chunk: [token.slice(0, remaining)], consumed: 1, nextIndex: (cursor + 1) % total };
+      // fallback: include the whole long word (do not break words)
+      return { chunk: [token], consumed: 1, nextIndex: (cursor + 1) % total };
     }
     if (extra <= remaining) {
       chunk.push(token);
