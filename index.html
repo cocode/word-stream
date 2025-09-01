@@ -8,6 +8,7 @@
     border: 2px solid #ccc; margin: 1rem 0; user-select: none;
     contain: layout paint; /* isolate paints */
     will-change: contents; /* we change text frequently */
+    text-align: center;
   }
   label { display: inline-block; min-width: 6rem; }
   .row { margin: 0.5rem 0; }
@@ -17,6 +18,8 @@
 <div class="row">
   <label for="fps">Target FPS</label>
   <input id="fps" type="number" value="37" min="1" max="240" step="1">
+  <label for="maxWords" style="margin-left:1rem">Words per frame</label>
+  <input id="maxWords" type="number" value="8" min="1" max="200" step="1">
   <button id="start">Start</button>
   <button id="stop">Stop</button>
   <label style="margin-left:1rem">
@@ -28,7 +31,7 @@
 <div id="stats">–</div>
 
 <script>
-// Sentences loaded from TheTimeMachine.txt
+// Words loaded from TheTimeMachine.txt
 let words = [];
 
 const stage = document.getElementById('stage');
@@ -37,31 +40,31 @@ const snapChk  = document.getElementById('snap');
 const stats    = document.getElementById('stats');
 const startBtn = document.getElementById('start');
 const stopBtn  = document.getElementById('stop');
+const maxWordsInput = document.getElementById('maxWords');
 
 let running = false;
 let idx = 0;
 let acc = 0;
 let last = 0;
 let periodMs = 1000 / Number(fpsInput.value);
+let chunkSize = Math.max(1, Number(maxWordsInput.value) || 1);
 
 // rolling measurements
 const intervals = [];
 const MAX_SAMPLES = 120;
 let lastSwapTime = 0;
 
-// Load and split text into sentences
+// Load and split text into words
 const loadPromise = (async () => {
   try {
     stage.textContent = 'Loading text…';
     const res = await fetch('TheTimeMachine.txt');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
-    // Normalize whitespace
+    // Normalize whitespace and split into words
     const normalized = text.replace(/\r\n?|\n/g, ' ').replace(/\s+/g, ' ').trim();
-    // Split on sentence terminators, keep punctuation
-    const raw = normalized.split(/(?<=[.!?])\s+(?=[\"'“”‘’(\[]?[A-Z0-9])/g);
-    words = raw.map(s => s.trim()).filter(s => s.length > 0);
-    if (words.length === 0) throw new Error('No sentences parsed');
+    words = normalized.split(' ').filter(Boolean);
+    if (words.length === 0) throw new Error('No words parsed');
     stage.textContent = 'Ready…';
   } catch (err) {
     console.error(err);
@@ -92,8 +95,17 @@ function updatePeriod() {
 
 function showNext() {
   if (!words || words.length === 0) return; // nothing to show yet
-  idx = (idx + 1) % words.length;
-  stage.textContent = words[idx];
+  // advance by chunk size and display that many words
+  idx = (idx + chunkSize) % words.length;
+  const end = idx + Math.min(chunkSize, words.length);
+  let chunk;
+  if (end <= words.length) {
+    chunk = words.slice(idx, end);
+  } else {
+    const overflow = end - words.length;
+    chunk = words.slice(idx).concat(words.slice(0, overflow));
+  }
+  stage.textContent = chunk.join(' ');
 
   // record actual interval
   const now = performance.now();
@@ -127,11 +139,11 @@ function loop(now) {
 }
 
 async function start() {
-  // Ensure sentences are loaded before starting
+  // Ensure words are loaded before starting
   try { await loadPromise; } catch (_) { /* handled in loader */ }
   updatePeriod();
   running = true;
-  idx = -1; acc = 0; last = 0; lastSwapTime = 0;
+  idx = -chunkSize; acc = 0; last = 0; lastSwapTime = 0;
   intervals.length = 0;
   requestAnimationFrame(loop);
 }
@@ -144,6 +156,9 @@ fpsInput.addEventListener('change', () => {
 snapChk.addEventListener('change', updatePeriod);
 startBtn.addEventListener('click', start);
 stopBtn.addEventListener('click', stop);
+maxWordsInput.addEventListener('change', () => {
+  chunkSize = Math.max(1, Number(maxWordsInput.value) || 1);
+});
 
 // Pause cleanly in background tabs (RAF throttles anyway)
 document.addEventListener('visibilitychange', () => {
