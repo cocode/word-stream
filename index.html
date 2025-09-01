@@ -22,7 +22,13 @@
   .control { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin: 0.5rem 0; }
   label { display: inline-block; min-width: 6rem; }
   .row { margin: 0.5rem 0; }
-  #stats { font-variant-numeric: tabular-nums; }
+  /* Stats table */
+  #statsTable td.value, #statsTable td.plusminus {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    text-align: right;
+    white-space: nowrap;
+    min-width: 8ch;
+  }
 </style>
 
 <div class="d-flex justify-content-center">
@@ -65,10 +71,33 @@
         </div>
         <div class="card mt-3">
           <div class="card-header">Statistics</div>
-          <div class="card-body">
-            <div id="stats">–</div>
-          </div>
+        <div class="card-body">
+          <table class="table table-sm mb-0" id="statsTable" aria-label="Statistics">
+            <tbody>
+              <tr>
+                <th scope="row">Target</th>
+                <td class="value" id="stat-target">–</td>
+                <td class="plusminus"></td>
+              </tr>
+              <tr>
+                <th scope="row">Actual</th>
+                <td class="value" id="stat-actual">–</td>
+                <td class="plusminus"></td>
+              </tr>
+              <tr>
+                <th scope="row">Avg</th>
+                <td class="value" id="stat-avg">–</td>
+                <td class="plusminus" id="stat-std">–</td>
+              </tr>
+              <tr>
+                <th scope="row">Frames</th>
+                <td class="value" id="stat-frames">–</td>
+                <td class="plusminus"></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+      </div>
       </div>
     </div>
   </div>
@@ -82,7 +111,11 @@ let tokens = [];
 const stage = document.getElementById('stage');
 const fpsInput = document.getElementById('fps');
 const snapChk  = document.getElementById('snap');
-const stats    = document.getElementById('stats');
+const statTarget = document.getElementById('stat-target');
+const statActual = document.getElementById('stat-actual');
+const statAvg    = document.getElementById('stat-avg');
+const statStd    = document.getElementById('stat-std');
+const statFrames = document.getElementById('stat-frames');
 const toggleBtn = document.getElementById('toggle');
 const maxCharsInput = document.getElementById('maxChars');
 const prevBtn  = document.getElementById('prev');
@@ -213,8 +246,16 @@ function showNext() {
       const variance = intervals.reduce((a,b)=>a + (b-mean)*(b-mean), 0) / intervals.length;
       const stdev = Math.sqrt(variance);
 
-      stats.textContent = `Target: ${(1000/periodMs).toFixed(2)} fps  |  Actual: ${(1000/mean).toFixed(2)} fps  `
-        + `(${mean.toFixed(2)} ms ± ${stdev.toFixed(2)} ms over ${intervals.length} swaps)`;
+      const fmt = (v, d=2) => Number(v).toFixed(d);
+      const avgMs = mean;
+      const stdMs = stdev;
+      const tgtFps = 1000 / periodMs;
+      const actFps = 1000 / mean;
+      statTarget.textContent = `${fmt(tgtFps)} fps`;
+      statActual.textContent = `${fmt(actFps)} fps`;
+      statAvg.textContent = `${fmt(avgMs)} ms`;
+      statStd.textContent = `± ${fmt(stdMs)} ms`;
+      statFrames.textContent = String(intervals.length);
     }
     lastSwapTime = now;
   }
