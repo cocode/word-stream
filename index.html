@@ -23,12 +23,20 @@
   label { display: inline-block; min-width: 6rem; }
   .row { margin: 0.5rem 0; }
   /* Stats table */
-  #statsTable td.value, #statsTable td.plusminus {
+  #statsTable td.value { white-space: nowrap; }
+  #statsTable td.plusminus {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     text-align: right;
     white-space: nowrap;
     min-width: 8ch;
   }
+  #statsTable td.value .num {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    display: inline-block;
+    text-align: right;
+    min-width: 8ch; /* numeric column width */
+  }
+  #statsTable td.value .unit { margin-left: 0.35ch; opacity: 0.9; }
 </style>
 
 <div class="d-flex justify-content-center">
@@ -76,22 +84,22 @@
             <tbody>
               <tr>
                 <th scope="row">Target</th>
-                <td class="value" id="stat-target">–</td>
+                <td class="value"><span class="num" id="stat-target-num">–</span> <span class="unit">fps</span></td>
                 <td class="plusminus"></td>
               </tr>
               <tr>
                 <th scope="row">Actual</th>
-                <td class="value" id="stat-actual">–</td>
+                <td class="value"><span class="num" id="stat-actual-num">–</span> <span class="unit">fps</span></td>
                 <td class="plusminus"></td>
               </tr>
               <tr>
                 <th scope="row">Avg</th>
-                <td class="value" id="stat-avg">–</td>
+                <td class="value"><span class="num" id="stat-avg-num">–</span> <span class="unit">ms</span></td>
                 <td class="plusminus" id="stat-std">–</td>
               </tr>
               <tr>
                 <th scope="row">Frames</th>
-                <td class="value" id="stat-frames">–</td>
+                <td class="value"><span class="num" id="stat-frames-num">–</span></td>
                 <td class="plusminus"></td>
               </tr>
             </tbody>
@@ -111,11 +119,11 @@ let tokens = [];
 const stage = document.getElementById('stage');
 const fpsInput = document.getElementById('fps');
 const snapChk  = document.getElementById('snap');
-const statTarget = document.getElementById('stat-target');
-const statActual = document.getElementById('stat-actual');
-const statAvg    = document.getElementById('stat-avg');
-const statStd    = document.getElementById('stat-std');
-const statFrames = document.getElementById('stat-frames');
+const statTargetNum = document.getElementById('stat-target-num');
+const statActualNum = document.getElementById('stat-actual-num');
+const statAvgNum    = document.getElementById('stat-avg-num');
+const statStd       = document.getElementById('stat-std');
+const statFramesNum = document.getElementById('stat-frames-num');
 const toggleBtn = document.getElementById('toggle');
 const maxCharsInput = document.getElementById('maxChars');
 const prevBtn  = document.getElementById('prev');
@@ -251,11 +259,11 @@ function showNext() {
       const stdMs = stdev;
       const tgtFps = 1000 / periodMs;
       const actFps = 1000 / mean;
-      statTarget.textContent = `${fmt(tgtFps)} fps`;
-      statActual.textContent = `${fmt(actFps)} fps`;
-      statAvg.textContent = `${fmt(avgMs)} ms`;
+      statTargetNum.textContent = fmt(tgtFps);
+      statActualNum.textContent = fmt(actFps);
+      statAvgNum.textContent = fmt(avgMs);
       statStd.textContent = `± ${fmt(stdMs)} ms`;
-      statFrames.textContent = String(intervals.length);
+      statFramesNum.textContent = String(intervals.length);
     }
     lastSwapTime = now;
   }
