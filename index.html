@@ -96,6 +96,14 @@
           <table class="table table-sm mb-0" id="statsTable" aria-label="Statistics">
             <tbody>
               <tr>
+                <th scope="row">Display</th>
+                <td class="value">
+                  <span class="num" id="stat-display-num">–</span> <span class="unit">Hz</span>
+                  <span class="effms"> ( <span class="num" id="stat-display-ms-num">–</span> <span class="unit">ms</span> )</span>
+                </td>
+                <td class="plusminus"></td>
+              </tr>
+              <tr>
                 <th scope="row">Target</th>
                 <td class="value">
                   <span class="num" id="stat-target-num">–</span> <span class="unit">fps</span>
@@ -140,6 +148,8 @@ const statActualNum = document.getElementById('stat-actual-num');
 const statAvgNum    = document.getElementById('stat-avg-num');
 const statStdNum    = document.getElementById('stat-std-num');
 const statFramesNum = document.getElementById('stat-frames-num');
+const statDisplayNum   = document.getElementById('stat-display-num');
+const statDisplayMsNum = document.getElementById('stat-display-ms-num');
 const toggleBtn = document.getElementById('toggle');
 const maxCharsInput = document.getElementById('maxChars');
 const prevBtn  = document.getElementById('prev');
@@ -151,6 +161,7 @@ let acc = 0;
 let last = 0;
 let periodMs = 0; // set below via updatePeriod()
 let maxChars = Math.max(1, Number(maxCharsInput.value) || 1);
+let measuredDisplayHz = null; // determined via RAF measurement
 
 // rolling measurements
 const intervals = [];
@@ -214,10 +225,8 @@ function effectivePeriodMs(minMs) {
   if (!snapChk.checked) return minMs;
   // Optionally “snap” to multiples of the display’s refresh period
   // so spacing is uniform (useful if you want 30 on a 60 Hz screen).
-  // If displayRate is unknown, assume 60.
-  const displayRate = (window.matchMedia("(min-resolution: 120dppx)").matches && window.screen && screen.frequency)
-    ? screen.frequency
-    : 60;
+  // Prefer measured refresh rate; fall back to 60 if unknown.
+  const displayRate = measuredDisplayHz || 60;
   const refreshMs = 1000 / displayRate;
   // choose the smallest integer multiple >= minMs (respect minimum)
   const steps = Math.max(1, Math.ceil(minMs / refreshMs));
@@ -353,5 +362,72 @@ nextBtn.addEventListener('click', async () => {
 // Pause cleanly in background tabs (RAF throttles anyway)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { stop(); }
+  else {
+    // Re-measure when the tab becomes visible again (monitor may have changed)
+    scheduleDisplayRateMeasurement();
+  }
 });
+
+// --- Display refresh rate measurement (via requestAnimationFrame) ---
+function measureDisplayRate(samples = 120, timeoutMs = 2000) {
+  return new Promise((resolve) => {
+    const times = [];
+    let start = null;
+    let done = false;
+
+    function finish() {
+      if (done) return; done = true;
+      if (times.length < 2) { resolve(null); return; }
+      const dts = [];
+      for (let i = 1; i < times.length; i++) dts.push(times[i] - times[i-1]);
+      // Robust average: trim outliers based on median ± 20%
+      const sorted = [...dts].sort((a,b)=>a-b);
+      const median = sorted[Math.floor(sorted.length/2)];
+      const low = median * 0.8;
+      const high = median * 1.2;
+      const trimmed = dts.filter(dt => dt >= low && dt <= high);
+      const use = trimmed.length >= Math.max(5, Math.floor(dts.length*0.5)) ? trimmed : dts;
+      const mean = use.reduce((a,b)=>a+b,0) / use.length;
+      const hz = 1000 / mean;
+      resolve(hz);
+    }
+
+    function tick(t) {
+      if (!start) start = t;
+      times.push(t);
+      if (times.length >= samples || (t - start) >= timeoutMs) {
+        finish();
+      } else {
+        requestAnimationFrame(tick);
+      }
+    }
+
+    // If the tab is hidden, rAF is heavily throttled; bail out fast.
+    if (document.hidden) { resolve(null); return; }
+    requestAnimationFrame(tick);
+    setTimeout(finish, timeoutMs + 100); // safety valve
+  });
+}
+
+async function scheduleDisplayRateMeasurement() {
+  const hz = await measureDisplayRate();
+  if (hz && Number.isFinite(hz)) {
+    measuredDisplayHz = hz;
+    const ms = 1000 / hz;
+    const fmt = (v, d=2) => Number(v).toFixed(d);
+    if (statDisplayNum) statDisplayNum.textContent = fmt(hz);
+    if (statDisplayMsNum) statDisplayMsNum.textContent = fmt(ms);
+    // If snapping is on, recompute target period now that we know the rate
+    updatePeriod();
+  } else {
+    // Unknown; clear display (keeps previous value if already measured)
+    if (!measuredDisplayHz) {
+      if (statDisplayNum) statDisplayNum.textContent = '–';
+      if (statDisplayMsNum) statDisplayMsNum.textContent = '–';
+    }
+  }
+}
+
+// Kick off an initial measurement shortly after load
+scheduleDisplayRateMeasurement();
 </script>
