@@ -27,14 +27,16 @@ the following would still show all of the second word.
 hello, madagascar
 ```
 ## Snap to display
+This poorly named setting controls whether the Min Interval above is a minimum, or a desired average. Leave this set for a minimum. Uncheck, and sometimes
+the images will be displayed faster, so as to keep the average as close to the target as possible.
 
 
 # Statistics
 
 ## Display
-How faster your display is updated. We can't update any faster than that, nor can we change that rate. 
+How fast your display hardware updates the screen. We can't update any faster than that, nor can we change that rate. 
 
-You'll see two numers, perhaps
+You'll see two numbers, perhaps
 ```
  	120.00 Hz 	8.33 ms
 ```
@@ -55,3 +57,4 @@ Is the average time we are taking between updates.
 
 ## Frames
 Frames is the total number of frames displayed so far.
+
