@@ -162,7 +162,7 @@ let acc = 0;
 let last = 0;
 let periodMs = 0; // set below via updatePeriod()
 let maxChars = Math.max(1, Number(maxCharsInput.value) || 1);
-let measuredDisplayHz = null; // determined via RAF measurement
+let measuredDisplayHz = null; // display refresh Hz used for snapping (rounded)
 
 // rolling measurements
 const intervals = [];
@@ -414,10 +414,11 @@ function measureDisplayRate(samples = 120, timeoutMs = 2000) {
 async function scheduleDisplayRateMeasurement() {
   const hz = await measureDisplayRate();
   if (hz && Number.isFinite(hz)) {
-    measuredDisplayHz = hz;
-    const ms = 1000 / hz;
+    // Simplify: round to the nearest integer Hz to avoid jitter
+    measuredDisplayHz = Math.max(1, Math.round(hz));
+    const ms = 1000 / measuredDisplayHz;
     const fmt = (v, d=2) => Number(v).toFixed(d);
-    if (statDisplayNum) statDisplayNum.textContent = fmt(hz);
+    if (statDisplayNum) statDisplayNum.textContent = fmt(measuredDisplayHz);
     if (statDisplayMsNum) statDisplayMsNum.textContent = fmt(ms);
     // If snapping is on, recompute target period now that we know the rate
     updatePeriod();
