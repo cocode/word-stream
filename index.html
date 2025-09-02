@@ -99,22 +99,22 @@
                 <th scope="row">Display</th>
                 <td class="value">
                   <span class="num" id="stat-display-num">–</span> <span class="unit">Hz</span>
-                  <span class="effms"> ( <span class="num" id="stat-display-ms-num">–</span> <span class="unit">ms</span> )</span>
                 </td>
-                <td class="plusminus"></td>
+                <td class="plusminus"><span class="num" id="stat-display-ms-num">–</span> <span class="unit">ms</span></td>
               </tr>
               <tr>
                 <th scope="row">Target</th>
                 <td class="value">
                   <span class="num" id="stat-target-num">–</span> <span class="unit">fps</span>
-                  <span class="effms"> ( <span class="num" id="stat-target-ms-num">–</span> <span class="unit">ms</span> )</span>
                 </td>
-                <td class="plusminus"></td>
+                <td class="plusminus"><span class="num" id="stat-target-ms-num">–</span> <span class="unit">ms</span></td>
               </tr>
               <tr>
                 <th scope="row">Actual</th>
-                <td class="value"><span class="num" id="stat-actual-num">–</span> <span class="unit">fps</span></td>
-                <td class="plusminus"></td>
+                <td class="value">
+                  <span class="num" id="stat-actual-num">–</span> <span class="unit">fps</span>
+                </td>
+                <td class="plusminus"><span class="num" id="stat-actual-ms-num">–</span> <span class="unit">ms</span></td>
               </tr>
               <tr>
                 <th scope="row">Avg</th>
@@ -145,6 +145,7 @@ const minMsInput = document.getElementById('minMs');
 const snapChk  = document.getElementById('snap');
 const statTargetNum = document.getElementById('stat-target-num');
 const statActualNum = document.getElementById('stat-actual-num');
+const statActualMsNum = document.getElementById('stat-actual-ms-num');
 const statAvgNum    = document.getElementById('stat-avg-num');
 const statStdNum    = document.getElementById('stat-std-num');
 const statFramesNum = document.getElementById('stat-frames-num');
@@ -290,6 +291,7 @@ function showNext() {
       statTargetNum.textContent = fmt(tgtFps);
       statTargetMsNum.textContent = fmt(tgtMs);
       statActualNum.textContent = fmt(actFps);
+      if (statActualMsNum) statActualMsNum.textContent = fmt(avgMs);
       statAvgNum.textContent = fmt(avgMs);
       statStdNum.textContent = fmt(stdMs);
       statFramesNum.textContent = String(intervals.length);
