@@ -37,6 +37,19 @@
     min-width: 8ch; /* numeric column width */
   }
   #statsTable td.value .unit { margin-left: 0.35ch; opacity: 0.9; }
+  #statsTable td.value .effms .num {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    display: inline-block;
+    text-align: right;
+    min-width: 6ch; /* width for ms number */
+  }
+  #statsTable td.plusminus .num {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    display: inline-block;
+    text-align: right;
+    min-width: 6ch;
+  }
+  #statsTable td.plusminus .unit { margin-left: 0.35ch; opacity: 0.9; }
 </style>
 
 <div class="d-flex justify-content-center">
@@ -64,8 +77,8 @@
           <div class="card-header">Settings</div>
           <div class="card-body">
             <div class="mb-3">
-              <label for="fps" class="form-label">Target FPS</label>
-              <input id="fps" type="number" class="form-control" value="4" min="1" max="240" step="1">
+              <label for="minMs" class="form-label">Min interval (ms)</label>
+              <input id="minMs" type="number" class="form-control" value="250" min="1" max="2000" step="5">
             </div>
             <div class="mb-3">
               <label for="maxChars" class="form-label">Max characters</label>
@@ -84,7 +97,10 @@
             <tbody>
               <tr>
                 <th scope="row">Target</th>
-                <td class="value"><span class="num" id="stat-target-num">–</span> <span class="unit">fps</span></td>
+                <td class="value">
+                  <span class="num" id="stat-target-num">–</span> <span class="unit">fps</span>
+                  <span class="effms"> ( <span class="num" id="stat-target-ms-num">–</span> <span class="unit">ms</span> )</span>
+                </td>
                 <td class="plusminus"></td>
               </tr>
               <tr>
@@ -95,7 +111,7 @@
               <tr>
                 <th scope="row">Avg</th>
                 <td class="value"><span class="num" id="stat-avg-num">–</span> <span class="unit">ms</span></td>
-                <td class="plusminus" id="stat-std">–</td>
+                <td class="plusminus"><span class="sym">±</span> <span class="num" id="stat-std-num">0.00</span> <span class="unit">ms</span></td>
               </tr>
               <tr>
                 <th scope="row">Frames</th>
@@ -117,12 +133,12 @@ let text = '';
 let tokens = [];
 
 const stage = document.getElementById('stage');
-const fpsInput = document.getElementById('fps');
+const minMsInput = document.getElementById('minMs');
 const snapChk  = document.getElementById('snap');
 const statTargetNum = document.getElementById('stat-target-num');
 const statActualNum = document.getElementById('stat-actual-num');
 const statAvgNum    = document.getElementById('stat-avg-num');
-const statStd       = document.getElementById('stat-std');
+const statStdNum    = document.getElementById('stat-std-num');
 const statFramesNum = document.getElementById('stat-frames-num');
 const toggleBtn = document.getElementById('toggle');
 const maxCharsInput = document.getElementById('maxChars');
@@ -133,7 +149,7 @@ let running = false;
 let idx = 0;
 let acc = 0;
 let last = 0;
-let periodMs = 1000 / Number(fpsInput.value);
+let periodMs = 0; // set below via updatePeriod()
 let maxChars = Math.max(1, Number(maxCharsInput.value) || 1);
 
 // rolling measurements
@@ -194,8 +210,8 @@ const loadPromise = (async () => {
   }
 })();
 
-function effectivePeriodMs(targetMs) {
-  if (!snapChk.checked) return targetMs;
+function effectivePeriodMs(minMs) {
+  if (!snapChk.checked) return minMs;
   // Optionally “snap” to multiples of the display’s refresh period
   // so spacing is uniform (useful if you want 30 on a 60 Hz screen).
   // If displayRate is unknown, assume 60.
@@ -203,13 +219,14 @@ function effectivePeriodMs(targetMs) {
     ? screen.frequency
     : 60;
   const refreshMs = 1000 / displayRate;
-  // round to nearest integer multiple (>=1)
-  const steps = Math.max(1, Math.round(targetMs / refreshMs));
+  // choose the smallest integer multiple >= minMs (respect minimum)
+  const steps = Math.max(1, Math.ceil(minMs / refreshMs));
   return steps * refreshMs;
 }
 
 function updatePeriod() {
-  periodMs = effectivePeriodMs(1000 / Math.max(1, Number(fpsInput.value)));
+  const minMs = Math.max(1, Number(minMsInput.value));
+  periodMs = effectivePeriodMs(minMs);
 }
 
 function computeChunk(startIndex) {
@@ -258,11 +275,14 @@ function showNext() {
       const avgMs = mean;
       const stdMs = stdev;
       const tgtFps = 1000 / periodMs;
+      const tgtMs  = periodMs;
       const actFps = 1000 / mean;
+      const statTargetMsNum = document.getElementById('stat-target-ms-num');
       statTargetNum.textContent = fmt(tgtFps);
+      statTargetMsNum.textContent = fmt(tgtMs);
       statActualNum.textContent = fmt(actFps);
       statAvgNum.textContent = fmt(avgMs);
-      statStd.textContent = `± ${fmt(stdMs)} ms`;
+      statStdNum.textContent = fmt(stdMs);
       statFramesNum.textContent = String(intervals.length);
     }
     lastSwapTime = now;
@@ -297,7 +317,7 @@ async function start() {
 }
 function stop() { running = false; updateRunButtons(); }
 
-fpsInput.addEventListener('change', () => {
+minMsInput.addEventListener('change', () => {
   updatePeriod();
   // keep current accumulator; change takes effect immediately
 });
