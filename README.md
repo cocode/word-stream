@@ -6,3 +6,4 @@ This project was written to experiment with various frame rates and formats to t
 
 WordStream allows users to select intervals (ms) , and length of text to be displayed in each frame, like a tachistoscope.
 
+You can try this project on its [github page](https://cocode.github.io/word-stream/)
