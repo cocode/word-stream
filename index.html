@@ -170,6 +170,8 @@ const MAX_SAMPLES = 120;
 let lastSwapTime = 0;
 // history of how many tokens were consumed per shown frame
 const history = [];
+// total frames displayed during current run
+let totalFrames = 0;
 
 // Disable controls until text loads
 toggleBtn.disabled = true;
@@ -294,9 +296,10 @@ function showNext() {
       if (statActualMsNum) statActualMsNum.textContent = fmt(avgMs);
       statAvgNum.textContent = fmt(avgMs);
       statStdNum.textContent = fmt(stdMs);
-      statFramesNum.textContent = String(intervals.length);
     }
     lastSwapTime = now;
+    totalFrames += 1;
+    statFramesNum.textContent = String(totalFrames);
   }
 }
 
@@ -324,6 +327,8 @@ async function start() {
   acc = 0; last = 0; lastSwapTime = 0;
   intervals.length = 0;
   history.length = 0;
+  totalFrames = 0;
+  if (statFramesNum) statFramesNum.textContent = '0';
   requestAnimationFrame(loop);
 }
 function stop() { running = false; updateRunButtons(); }
